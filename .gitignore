@@ -1,1 +1,14 @@
-/frontend/node_modules/
+frontend/node_modules/
+frontend/build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Uploads are held in memory now; this folder is only left over from the old
+# version and may still hold someone's document.
+backend/static/
+
+# Local-only notes (workflow phase 7)
+observe.md
+CLAUDE.md

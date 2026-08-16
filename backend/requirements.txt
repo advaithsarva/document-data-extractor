@@ -1,0 +1,10 @@
+Flask==3.0.0
+flask-cors==4.0.0
+PyMuPDF==1.26.3
+pytesseract==0.3.13
+Pillow==10.4.0
+spacy==3.8.7
+
+# Also required, and not installable with pip:
+#   Tesseract OCR binary   https://github.com/UB-Mannheim/tesseract/wiki
+#   python -m spacy download en_core_web_sm

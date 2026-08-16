@@ -1,129 +1,68 @@
-from flask import Flask, request, jsonify
-from werkzeug.utils import secure_filename
-import os
-import logging
-from datetime import datetime
-from flask_cors import CORS  # Import CORS from flask_cors
+"""HTTP wrapper around data_extractor.extract.
 
-# Configure logging
+Uploads are held in memory and never written to disk. The original saved every
+upload to static/files/, deleted it afterwards, and swept the folder for files
+older than an hour — three moving parts whose only job was to undo each other,
+and which still left a user's document sitting in the repo when extraction
+raised. Nothing to clean up if nothing is written.
+"""
+
+import logging
+import os
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+
+from data_extractor import ALLOWED_EXTENSIONS, MAX_BYTES, extract
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-app.config['SECRET_KEY'] = 'supersecretkey'
-app.config['UPLOAD_FOLDER'] = 'static/files'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config["MAX_CONTENT_LENGTH"] = MAX_BYTES
 
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
+# Only the dev frontend by default. Set CORS_ORIGINS="https://your.app" to deploy.
+CORS(app, origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","))
 
-# Ensure the upload folder exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-def allowed_file(filename):
-    """Check if the uploaded file has an allowed extension."""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "max_bytes": MAX_BYTES,
+                    "formats": sorted(ALLOWED_EXTENSIONS)})
 
-def cleanup_old_files():
-    """Clean up old uploaded files to prevent storage issues."""
-    try:
-        upload_folder = app.config['UPLOAD_FOLDER']
-        current_time = datetime.now().timestamp()
 
-        for filename in os.listdir(upload_folder):
-            file_path = os.path.join(upload_folder, filename)
-            if os.path.isfile(file_path):
-                file_time = os.path.getmtime(file_path)
-                # Remove files older than 1 hour
-                if current_time - file_time > 3600:
-                    os.remove(file_path)
-                    logger.info(f"Removed old file: {filename}")
-    except Exception as e:
-        logger.error(f"Error cleaning up files: {e}")
-
-@app.route('/upload', methods=['POST'])
+@app.post("/upload")
 def upload_file():
-    if request.method == 'POST':
-        try:
-            # Check if file is in request
-            if 'file' not in request.files:
-                return jsonify({'error': 'No file uploaded'}), 400
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"error": "No file uploaded"}), 400
 
-            file = request.files['file']
+    try:
+        data = extract(file.read(), file.filename)
+    except ValueError as e:
+        # Everything the caller can fix: wrong type, too big, no text in it.
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("Extraction failed for %s", file.filename)
+        return jsonify({"error": f"Error processing file: {e}"}), 500
 
-            # Check if file was selected
-            if file.filename == '':
-                return jsonify({'error': 'No file selected'}), 400
+    return jsonify({"success": True, "filename": file.filename, "data": data})
 
-            # Check if file type is allowed
-            if not allowed_file(file.filename):
-                return jsonify({'error': 'File type not allowed. Supported formats: PDF, PNG, JPG, JPEG, GIF, BMP, TIFF'}), 400
-
-            if file:
-                # Clean up old files periodically
-                cleanup_old_files()
-
-                # Secure the filename
-                filename = secure_filename(file.filename)
-
-                # Add timestamp to avoid conflicts
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                name, ext = os.path.splitext(filename)
-                filename = f"{name}_{timestamp}{ext}"
-
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-                # Save the file
-                file.save(file_path)
-                logger.info(f"File saved: {filename}")
-
-                # Import and call the data extraction function
-                try:
-                    from data_extractor import data_extraction
-                    result = data_extraction(file_path)
-
-                    # Clean up the uploaded file after processing
-                    try:
-                        os.remove(file_path)
-                        logger.info(f"Cleaned up file: {filename}")
-                    except Exception as e:
-                        logger.warning(f"Could not clean up file {filename}: {e}")
-
-                    return jsonify({
-                        'success': True,
-                        'filename': filename,
-                        'data': result
-                    })
-
-                except ImportError as e:
-                    logger.error(f"Could not import data_extractor: {e}")
-                    return jsonify({'error': 'Data extraction module not found'}), 500
-
-                except Exception as e:
-                    logger.error(f"Error during data extraction: {e}")
-                    # Clean up file on error
-                    try:
-                        os.remove(file_path)
-                    except:
-                        pass
-                    return jsonify({'error': f'Error processing file: {str(e)}'}), 500
-
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({'error': 'File too large. Maximum size is 16MB'}), 413
+    return jsonify({"error": f"File too large. Maximum size is "
+                             f"{MAX_BYTES // (1024 * 1024)}MB"}), 413
+
 
 @app.errorhandler(404)
 def not_found(e):
-    return jsonify({'error': 'Endpoint not found'}), 404
+    return jsonify({"error": "Endpoint not found"}), 404
 
-@app.errorhandler(500)
-def internal_error(e):
-    return jsonify({'error': 'Internal server error'}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    # debug=True exposes the Werkzeug console; never on by default, and never
+    # together with the 0.0.0.0 bind the original shipped with.
+    app.run(host=os.environ.get("HOST", "127.0.0.1"),
+            port=int(os.environ.get("PORT", 5000)),
+            debug=os.environ.get("FLASK_DEBUG") == "1")

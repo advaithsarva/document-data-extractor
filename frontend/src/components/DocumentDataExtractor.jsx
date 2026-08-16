@@ -1,6 +1,19 @@
 import React, { useState } from 'react';
 import './DocumentDataExtractor.css';
 
+// Set REACT_APP_API_URL to point the UI at a deployed backend.
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000';
+
+// The backend decides which entity kinds exist; anything it returns and this
+// map knows about gets rendered, so adding a kind server-side needs one line here.
+const ENTITY_LABELS = {
+  names: ['Names', '👤'],
+  dates: ['Dates', '📅'],
+  addresses: ['Places', '📍'],
+  emails: ['Emails', '✉️'],
+  phones: ['Phone numbers', '📞'],
+};
+
 function DocumentDataExtractor() {
   const [file, setFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +48,7 @@ function DocumentDataExtractor() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/upload', {
+      const response = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -62,43 +75,25 @@ function DocumentDataExtractor() {
 
     return (
       <div className="result-section">
-        <h3>📁 File: {data.filename}</h3>
+        <h3>📁 {data.filename} — {data.data.page_count} page{data.data.page_count === 1 ? '' : 's'}</h3>
 
-        {data.data.entities && (
-          <div className="result-section">
-            <h3>🔍 Extracted Entities</h3>
-            {data.data.entities.names && data.data.entities.names.length > 0 && (
-              <div>
-                <strong>Names:</strong>
+        <div className="result-section">
+          <h3>🔍 Extracted Entities</h3>
+          {Object.entries(ENTITY_LABELS).map(([kind, [label, icon]]) => {
+            const values = (data.data.entities || {})[kind] || [];
+            if (values.length === 0) return null;
+            return (
+              <div key={kind}>
+                <strong>{label}:</strong>
                 <div className="entity-list">
-                  {data.data.entities.names.map((name, index) => (
-                    <span key={index} className="entity-item">👤 {name}</span>
+                  {values.map((value, index) => (
+                    <span key={index} className="entity-item">{icon} {value}</span>
                   ))}
                 </div>
               </div>
-            )}
-            {data.data.entities.dates && data.data.entities.dates.length > 0 && (
-              <div>
-                <strong>Dates:</strong>
-                <div className="entity-list">
-                  {data.data.entities.dates.map((date, index) => (
-                    <span key={index} className="entity-item">📅 {date}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {data.data.entities.addresses && data.data.entities.addresses.length > 0 && (
-              <div>
-                <strong>Addresses:</strong>
-                <div className="entity-list">
-                  {data.data.entities.addresses.map((address, index) => (
-                    <span key={index} className="entity-item">📍 {address}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+            );
+          })}
+        </div>
 
         {data.data.tables && data.data.tables.length > 0 && (
           <div className="result-section">
