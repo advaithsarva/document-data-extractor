@@ -1,39 +1,41 @@
 # Results
 
-Every number below came from a command in this file, on this machine
-(Windows 11, Python 3.12, Tesseract 5.x, `SEED = 42`, 30 documents).
+Every number below comes from a command in this file, run on this machine: Windows 11, Python 3.12, Tesseract 5.x, `SEED = 42`, with 30 documents.
 
 ---
 
-## 1. The test suite, run against the old code and the new code
+## 1. The test suite: old code vs. rebuilt code
 
 ```bash
 cd backend
-python test_extract.py                          # rebuilt extractor
-python test_extract.py original.data_extractor  # the version this replaced
+
+python test_extract.py
+# rebuilt extractor
+
+python test_extract.py original.data_extractor
+# the version this replaced
 ```
 
-| Target | Passed |
-|---|---|
-| Rebuilt extractor | **10 / 10** |
-| Original extractor (kept in `backend/original/`) | **1 / 10** |
+| Target                                   |      Passed |
+| ---------------------------------------- | ----------: |
+| Rebuilt extractor                        | **10 / 10** |
+| Original extractor (`backend/original/`) |  **1 / 10** |
 
-The one test the original passes is `test_empty_document_raises` — it was
-already correct to refuse an unreadable file, and that behaviour was kept.
+The original code passes `test_empty_document_raises`. Refusing an unreadable document was already the correct behaviour, so that part was kept.
 
-The other nine are each named after a real defect:
+The other nine tests correspond to specific defects in the original:
 
-| Test | What the original did |
-|---|---|
-| `test_txt_is_actually_supported` | `.txt` was advertised in three places and sent to the image decoder; every upload failed |
-| `test_every_pdf_page_is_read` | read page 0 only, and refused any PDF with more than one page |
-| `test_scanned_pdf_falls_back_to_ocr` | PDFs only used the text layer, so scans returned nothing |
-| `test_full_month_names_are_dates` | matched `Jan 5, 2024` but not `January 5, 2024` |
-| `test_iso_dates_are_dates` | had no pattern for `2024-01-05` |
-| `test_output_order_is_deterministic` | `list(set(...))`, so output order changed every run |
-| `test_prose_colons_are_not_table_rows` | any line with a colon became a table row, timestamps included |
-| `test_unsupported_type_says_so` | blamed the document instead of naming the unsupported type |
-| `test_one_size_limit` | Flask allowed 16MB, the extractor rejected over 10MB |
+| Test                                   | What the original did                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `test_txt_is_actually_supported`       | `.txt` was advertised in three places but sent to the image decoder, so every upload failed |
+| `test_every_pdf_page_is_read`          | Read only page 0 and rejected PDFs with more than one page                                  |
+| `test_scanned_pdf_falls_back_to_ocr`   | PDFs only used the text layer, so scanned PDFs returned nothing                             |
+| `test_full_month_names_are_dates`      | Matched `Jan 5, 2024` but not `January 5, 2024`                                             |
+| `test_iso_dates_are_dates`             | Had no pattern for `2024-01-05`                                                             |
+| `test_output_order_is_deterministic`   | Used `list(set(...))`, so the output order could change between runs                        |
+| `test_prose_colons_are_not_table_rows` | Treated any line containing a colon as a table row, including timestamps                    |
+| `test_unsupported_type_says_so`        | Reported a document extraction failure instead of identifying the unsupported file type     |
+| `test_one_size_limit`                  | Flask allowed 16MB while the extractor rejected files over 10MB                             |
 
 ---
 
@@ -41,90 +43,85 @@ The other nine are each named after a real defect:
 
 ```bash
 cd backend
-python bench.py                                  # default, en_core_web_sm
-SPACY_MODEL=en_core_web_trf python bench.py      # transformer, for comparison
+
+python bench.py
+# default: en_core_web_sm
+
+SPACY_MODEL=en_core_web_trf python bench.py
+# transformer, for comparison
 ```
 
-30 seeded synthetic forms, each rendered down all three input paths: a PDF with
-a text layer, the same page as a scanned PDF with no text layer, and the same
-page as a PNG.
+The benchmark uses 30 seeded synthetic forms. Each form is tested through all three input paths: a PDF with a text layer, the same page as a scanned PDF without a text layer, and the same page as a PNG.
 
-### Default model (`en_core_web_sm`)
+### Default model: `en_core_web_sm`
 
-| Path | Field | Recall | Precision |
-|---|---|---|---|
-| PDF (text layer) | names | 1.00 | 0.97 |
-| | dates | 1.00 | 1.00 |
-| | addresses | 1.00 | 0.91 |
-| | emails | 1.00 | 1.00 |
-| | phones | 1.00 | 1.00 |
-| PDF (scanned, OCR) | names | 1.00 | 1.00 |
-| | dates | 1.00 | 1.00 |
-| | addresses | 1.00 | 0.94 |
-| | emails | 1.00 | 1.00 |
-| | phones | 1.00 | 1.00 |
-| PNG image (OCR) | names | 1.00 | 1.00 |
-| | dates | 1.00 | 1.00 |
-| | addresses | 1.00 | 0.94 |
-| | emails | 1.00 | 1.00 |
-| | phones | 1.00 | 1.00 |
+| Path               | Field     | Recall | Precision |
+| ------------------ | --------- | -----: | --------: |
+| PDF (text layer)   | names     |   1.00 |      0.97 |
+|                    | dates     |   1.00 |      1.00 |
+|                    | addresses |   1.00 |      0.91 |
+|                    | emails    |   1.00 |      1.00 |
+|                    | phones    |   1.00 |      1.00 |
+| PDF (scanned, OCR) | names     |   1.00 |      1.00 |
+|                    | dates     |   1.00 |      1.00 |
+|                    | addresses |   1.00 |      0.94 |
+|                    | emails    |   1.00 |      1.00 |
+|                    | phones    |   1.00 |      1.00 |
+| PNG image (OCR)    | names     |   1.00 |      1.00 |
+|                    | dates     |   1.00 |      1.00 |
+|                    | addresses |   1.00 |      0.94 |
+|                    | emails    |   1.00 |      1.00 |
+|                    | phones    |   1.00 |      1.00 |
 
-0 extraction failures out of 90 documents. Median latency: **0.016 s** for a
-PDF with a text layer, **0.74 s** for a PNG, **0.93 s** for a scanned PDF.
+There were **0 extraction failures across 90 documents**.
+
+Median latency was **0.016 s** for a PDF with a text layer, **0.74 s** for a PNG, and **0.93 s** for a scanned PDF.
 
 ### Why `en_core_web_sm` is the default
 
-The original preferred `en_core_web_trf` and fell back to `sm`. Measured
-side by side, the transformer is worse where it counts:
+The original implementation preferred `en_core_web_trf` and fell back to `sm`. The two were measured side by side:
 
-| Model | Name precision | Address precision | Median s (PDF text) |
-|---|---|---|---|
-| `en_core_web_sm` | **0.97** | 0.91 | **0.016** |
-| `en_core_web_trf` | 0.73 | **1.00** | 0.114 |
+| Model             | Name precision | Address precision | Median s (PDF text) |
+| ----------------- | -------------: | ----------------: | ------------------: |
+| `en_core_web_sm`  |       **0.97** |              0.91 |           **0.016** |
+| `en_core_web_trf` |           0.73 |          **1.00** |               0.114 |
 
-`trf` finds every place name, but labels roughly a quarter of what it returns
-as a person when it is not one, and costs 7× the latency and ~400MB of model.
-`sm` is the default; `SPACY_MODEL=en_core_web_trf` still switches it.
+The transformer finds every place name in this benchmark, but it also labels roughly a quarter of its person results incorrectly. It is about 7× slower and uses roughly 400MB more model memory.
+
+For that reason, `sm` is the default. `SPACY_MODEL=en_core_web_trf` is still available when the transformer is preferred.
 
 ---
 
-## 3. Read these numbers honestly
+## 3. How to read these numbers
 
-**The documents are synthetic.** They are generated by `bench.py` from a fixed
-word list, so every proper noun in them is ground truth and nothing else
-appears. That makes **precision an upper bound** — a real document full of
-company names, headings and chart labels will score lower. Recall is the number
-worth quoting: it says how often a field that is definitely present is found.
+**The documents are synthetic.** `bench.py` generates them from a fixed word list, so every proper noun in the fixtures is ground truth and nothing outside that list appears. That makes the measured precision an **upper bound**. A real document containing company names, headings, chart labels, and other text will produce a lower precision score.
 
-**Recall of 1.00 is partly a property of the fixtures.** The forms use labelled
-fields (`Name:`, `City:`), which the regex layer reads directly. Take the
-labels away and recall falls back to whatever spaCy manages alone, which on the
-`addresses` field was **0.10** before labelled-field patterns were added — the
-single largest measured improvement in this rebuild.
+Recall is the more useful number here because it measures how often a field that is known to be present is actually found.
+
+**The 1.00 recall is also partly a property of the fixtures.** The forms use labelled fields such as `Name:` and `City:`, which the regex layer can read directly.
+
+When those labels are removed, recall depends on spaCy alone. For `addresses`, that produced a recall of only **0.10** before the labelled-field patterns were added. That was the largest measured improvement in this rebuild.
 
 ---
 
 ## 4. Where it still fails
 
-Run on the real 7-page document this project was originally tested with — the
-one the old version rejected outright:
+The following command runs the extractor against the real seven-page document that was used during the original project. The old implementation rejected it outright:
 
 ```bash
 cd backend
+
 python data_extractor.py path/to/report.pdf
 ```
 
-7/7 pages extracted, 63 structural lines, 5 table rows. Two honest failures:
+The rebuilt extractor gets **7/7 pages**, with 63 structural lines and 5 table rows.
 
-- **Chart-heavy pages produce junk names.** Pages that are mostly figures have
-  a thin text layer, so they fall through to OCR, and OCR of axis labels and
-  legends yields fragments like `Lr edterans` and `Hay 0h`, which spaCy then
-  tags as people. No filter for this; a confidence threshold or a minimum
-  dictionary-word ratio would be the next thing to try.
-- **`et al.` citations become names.** `Wodzinski et al.` and
-  `Alqahtani et al.` are returned as people. Correct in the sense that they are
-  surnames, wrong for a form-extraction tool.
-- **`Kaggle` is returned as a person.** A model limitation, not a code defect.
+There are still a few known problems:
 
-The date extractor found nothing in that document, which is correct: it
-contains no dates.
+* **Chart-heavy pages can produce junk names.** Pages dominated by figures may have only a thin text layer, causing them to fall through to OCR. OCR can turn axis labels and legends into fragments such as `Lr edterans` and `Hay 0h`, which spaCy may then classify as people. There is currently no filter for this. A confidence threshold or minimum dictionary-word ratio would be a reasonable next experiment.
+
+* **`et al.` citations can become names.** `Wodzinski et al.` and `Alqahtani et al.` are returned as people. They are valid surnames, but they are not people fields in the context of a form-extraction tool.
+
+* **`Kaggle` is returned as a person.** This appears to be a model limitation rather than a defect in the extraction code.
+
+The date extractor returned nothing for this document, which is expected because the document contains no dates.
