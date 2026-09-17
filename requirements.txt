@@ -1,0 +1,19 @@
+# Runtime dependencies. There was no requirements file at all, so a clean
+# checkout could not be installed -- the suite only passed on a machine that
+# happened to have these already.
+
+pymupdf>=1.24          # `fitz`: the PDF text layer, and page rendering for OCR
+pytesseract>=0.3.10    # OCR fallback for pages with no text layer
+pillow>=10.0           # the image pytesseract receives
+spacy>=3.7             # entity extraction
+flask>=3.0             # the API
+flask-cors>=4.0        # the React frontend calls it cross-origin in dev
+
+# After installing, fetch the spaCy model:
+#   python -m spacy download en_core_web_sm
+# SPACY_MODEL=en_core_web_trf switches to the transformer model.
+#
+# pytesseract is a wrapper, not the engine. Tesseract itself must be on PATH:
+#   Ubuntu   apt-get install tesseract-ocr
+#   macOS    brew install tesseract
+#   Windows  https://github.com/UB-Mannheim/tesseract/wiki
