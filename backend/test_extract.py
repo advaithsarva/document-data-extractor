@@ -18,7 +18,12 @@ import traceback
 import fitz
 from PIL import Image, ImageDraw
 
-MODULE = sys.argv[1] if len(sys.argv) > 1 else "data_extractor"
+# argv[1] names the module to test, so the same suite can be pointed at
+# backend/original/data_extractor.py for the comparison. Skip anything starting
+# with "-": under `python -m pytest -q` this file is imported with pytest's own
+# flags still in sys.argv, and argv[1] is "-q", which is not a module.
+_arg = sys.argv[1] if len(sys.argv) > 1 else None
+MODULE = _arg if _arg and not _arg.startswith("-") else "data_extractor"
 mod = importlib.import_module(MODULE)
 IS_ORIGINAL = "original" in MODULE
 
